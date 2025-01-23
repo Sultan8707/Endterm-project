@@ -11,8 +11,14 @@ import javafx.scene.shape.Rectangle;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -22,11 +28,13 @@ public class ChessGameGUI extends Application {
     private static final int BOARD_SIZE = 8;
     private static final String[][] board = new String[BOARD_SIZE][BOARD_SIZE];
 
-    // Map to store piece images
     private static final Map<String, Image> pieceImages = new HashMap<>();
-
     private int selectedRow = -1;
     private int selectedCol = -1;
+
+    private static final List<String> moveHistory = new ArrayList<>();
+
+    private static final String DB_URL = "jdbc:postgresql://localhost:5432/postgres";
 
     public ChessGameGUI() {
         // Default constructor required by JavaFX
@@ -35,6 +43,7 @@ public class ChessGameGUI extends Application {
     public static void main(String[] args) {
         loadPieceImages();
         initializeBoard();
+        initializeDatabase();
         launch(args);
     }
 
@@ -44,11 +53,9 @@ public class ChessGameGUI extends Application {
 
         for (int row = 0; row < BOARD_SIZE; row++) {
             for (int col = 0; col < BOARD_SIZE; col++) {
-                // Create a tile
                 Rectangle tile = new Rectangle(TILE_SIZE, TILE_SIZE);
                 tile.setFill((row + col) % 2 == 0 ? Color.BEIGE : Color.BROWN);
 
-                // Create a piece if present
                 StackPane stack = new StackPane(tile);
                 String piece = board[row][col];
                 if (!piece.isEmpty()) {
@@ -58,7 +65,6 @@ public class ChessGameGUI extends Application {
                     stack.getChildren().add(pieceImage);
                 }
 
-                // Add mouse click handler
                 int finalRow = row;
                 int finalCol = col;
                 stack.setOnMouseClicked(event -> handleMouseClick(finalRow, finalCol, grid));
@@ -68,26 +74,23 @@ public class ChessGameGUI extends Application {
         }
 
         Scene scene = new Scene(grid, TILE_SIZE * BOARD_SIZE, TILE_SIZE * BOARD_SIZE);
-        primaryStage.setTitle("Chess Game with Capture");
+        primaryStage.setTitle("Chess Game with Move History");
         primaryStage.setScene(scene);
         primaryStage.show();
     }
 
     private void handleMouseClick(int row, int col, GridPane grid) {
         if (selectedRow == -1 && selectedCol == -1) {
-            // First click: select a piece
             if (!board[row][col].isEmpty()) {
                 selectedRow = row;
                 selectedCol = col;
                 highlightTile(grid, row, col, Color.YELLOW);
             }
         } else {
-            // Second click: attempt to move the piece
             if (isValidMove(selectedRow, selectedCol, row, col)) {
                 String targetPiece = board[row][col];
                 String movingPiece = board[selectedRow][selectedCol];
 
-                // Check for king capture
                 if (targetPiece.equals("k")) {
                     System.out.println("White wins!");
                     System.exit(0);
@@ -96,15 +99,16 @@ public class ChessGameGUI extends Application {
                     System.exit(0);
                 }
 
-                // Move or capture
                 board[row][col] = movingPiece;
                 board[selectedRow][selectedCol] = "";
+
+                String move = String.format("%s from (%d, %d) to (%d, %d)", movingPiece, selectedRow, selectedCol, row, col);
+                moveHistory.add(move);
+                saveMoveToDatabase(movingPiece, selectedRow, selectedCol, row, col);
             }
 
             selectedRow = -1;
             selectedCol = -1;
-
-            // Refresh the board display
             refreshBoard(grid);
         }
     }
@@ -115,17 +119,51 @@ public class ChessGameGUI extends Application {
         return validMoves.contains(toRow + "," + toCol);
     }
 
+    private void saveMoveToDatabase(String piece, int fromRow, int fromCol, int toRow, int toCol) {
+        try (Connection connection = DriverManager.getConnection(DB_URL, "postgres", "postgres");
+             PreparedStatement statement = connection.prepareStatement(
+                     "INSERT INTO move_history (piece, from_row, from_col, to_row, to_col) VALUES (?, ?, ?, ?, ?)")
+        ) {
+            statement.setString(1, piece);
+            statement.setInt(2, fromRow);
+            statement.setInt(3, fromCol);
+            statement.setInt(4, toRow);
+            statement.setInt(5, toCol);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    private static void initializeDatabase() {
+        try (Connection connection = DriverManager.getConnection(DB_URL, "postgres", "postgres");
+             PreparedStatement statement = connection.prepareStatement(
+                     "CREATE TABLE IF NOT EXISTS move_history (" +
+                             "id SERIAL PRIMARY KEY, " +
+                             "piece TEXT, " +
+                             "from_row INTEGER, " +
+                             "from_col INTEGER, " +
+                             "to_row INTEGER, " +
+                             "to_col INTEGER" +
+                             ")")
+        ) {
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+
     private Set<String> getValidMoves(int row, int col, String piece) {
         Set<String> moves = new HashSet<>();
         boolean isWhite = Character.isUpperCase(piece.charAt(0));
         switch (piece.toLowerCase()) {
-            case "p": // Pawn
-                int direction = isWhite ? -1 : 1; // White moves up, Black moves down
-                // Move forward
+            case "p":
+                int direction = isWhite ? -1 : 1;
                 if (isInBounds(row + direction, col) && board[row + direction][col].isEmpty()) {
                     moves.add((row + direction) + "," + col);
                 }
-                // Capture diagonally
                 for (int dc : new int[]{-1, 1}) {
                     if (isInBounds(row + direction, col + dc)) {
                         String target = board[row + direction][col + dc];
@@ -135,20 +173,20 @@ public class ChessGameGUI extends Application {
                     }
                 }
                 break;
-            case "r": // Rook
+            case "r":
                 addLinearMoves(moves, row, col, isWhite);
                 break;
-            case "n": // Knight
+            case "n":
                 addKnightMoves(moves, row, col, isWhite);
                 break;
-            case "b": // Bishop
+            case "b":
                 addDiagonalMoves(moves, row, col, isWhite);
                 break;
-            case "q": // Queen
+            case "q":
                 addLinearMoves(moves, row, col, isWhite);
                 addDiagonalMoves(moves, row, col, isWhite);
                 break;
-            case "k": // King
+            case "k":
                 addKingMoves(moves, row, col, isWhite);
                 break;
         }
@@ -156,7 +194,6 @@ public class ChessGameGUI extends Application {
     }
 
     private void addLinearMoves(Set<String> moves, int row, int col, boolean isWhite) {
-        // Vertical and horizontal moves
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
                 if ((i == 0 || j == 0) && (i != j)) {
@@ -181,7 +218,6 @@ public class ChessGameGUI extends Application {
     }
 
     private void addDiagonalMoves(Set<String> moves, int row, int col, boolean isWhite) {
-        // Diagonal moves
         for (int i = -1; i <= 1; i += 2) {
             for (int j = -1; j <= 1; j += 2) {
                 int newRow = row + i;
@@ -204,7 +240,6 @@ public class ChessGameGUI extends Application {
     }
 
     private void addKnightMoves(Set<String> moves, int row, int col, boolean isWhite) {
-        // Knight moves
         int[][] deltas = {{-2, -1}, {-2, 1}, {2, -1}, {2, 1}, {-1, -2}, {1, -2}, {-1, 2}, {1, 2}};
         for (int[] delta : deltas) {
             int newRow = row + delta[0];
@@ -219,7 +254,6 @@ public class ChessGameGUI extends Application {
     }
 
     private void addKingMoves(Set<String> moves, int row, int col, boolean isWhite) {
-        // King moves
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
                 if (i != 0 || j != 0) {
@@ -284,7 +318,6 @@ public class ChessGameGUI extends Application {
     }
 
     private static void loadPieceImages() {
-        // Load images into the map
         pieceImages.put("p", new Image(ChessGameGUI.class.getResource("/images/Chess_pdt60.png").toExternalForm()));
         pieceImages.put("r", new Image(ChessGameGUI.class.getResource("/images/Chess_rdt60.png").toExternalForm()));
         pieceImages.put("n", new Image(ChessGameGUI.class.getResource("/images/Chess_ndt60.png").toExternalForm()));
@@ -301,17 +334,14 @@ public class ChessGameGUI extends Application {
     }
 
     private static void initializeBoard() {
-        // Black pieces
         String[] blackPieces = {"r", "n", "b", "q", "k", "b", "n", "r"};
         String[] whitePieces = {"R", "N", "B", "Q", "K", "B", "N", "R"};
 
-        // Set pieces
         board[0] = blackPieces;
-        board[1] = fillRow("p"); // Black pawns
-        board[6] = fillRow("P"); // White pawns
+        board[1] = fillRow("p");
+        board[6] = fillRow("P");
         board[7] = whitePieces;
 
-        // Empty cells
         for (int i = 2; i < 6; i++) {
             board[i] = fillRow("");
         }
