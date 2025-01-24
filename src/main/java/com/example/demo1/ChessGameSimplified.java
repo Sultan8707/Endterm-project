@@ -38,7 +38,7 @@ public class ChessGameSimplified extends Application {
         refreshBoard(grid);
 
         Scene scene = new Scene(grid, TILE_SIZE * BOARD_SIZE, TILE_SIZE * BOARD_SIZE);
-        primaryStage.setTitle("Simplified Chess Game");
+        primaryStage.setTitle("Chess");
         primaryStage.setScene(scene);
         primaryStage.show();
     }
