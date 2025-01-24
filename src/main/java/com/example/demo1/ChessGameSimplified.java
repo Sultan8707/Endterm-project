@@ -64,14 +64,12 @@ public class ChessGameSimplified extends Application {
                 int finalCol = col;
                 stack.setOnMouseClicked(event -> {
                     if (selectedPiece == null) {
-                        // Select a piece if present
                         if (!board[finalRow][finalCol].isEmpty()) {
                             selectedPiece = board[finalRow][finalCol];
                             selectedRow = finalRow;
                             selectedCol = finalCol;
                         }
                     } else {
-                        // Move the selected piece
                         board[selectedRow][selectedCol] = "";
                         board[finalRow][finalCol] = selectedPiece;
                         saveMoveToDatabase(selectedPiece, selectedRow, selectedCol, finalRow, finalCol);
@@ -108,7 +106,7 @@ public class ChessGameSimplified extends Application {
              PreparedStatement statement = connection.prepareStatement(
                      "CREATE TABLE IF NOT EXISTS move_history (" +
                              "id SERIAL PRIMARY KEY, " +
-                             "piece TEXT, " + // Добавлен столбец piece
+                             "piece TEXT, " +
                              "\"row\" INTEGER, " +
                              "col INTEGER, " +
                              "to_row INTEGER, " +
