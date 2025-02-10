@@ -10,6 +10,7 @@ public class Main extends Application {
     private static final int BOARD_SIZE = 8;
 
     public static void main(String[] args) {
+        GameBoard.initializeBoard();
         DatabaseManager.initializeDatabase();
         launch(args);
     }
