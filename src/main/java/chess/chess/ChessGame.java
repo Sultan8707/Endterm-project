@@ -11,8 +11,10 @@ import java.util.Map;
 public class ChessGame {
     private static final int TILE_SIZE = 80;
     private final GridPane grid;
+    private ChessPiece selectedPiece = null;
     private int selectedRow = -1;
     private int selectedCol = -1;
+    private StackPane highlightedTile = null;
 
     private boolean isWhiteTurn = true;
 
@@ -37,12 +39,18 @@ public class ChessGame {
 
     public void refreshBoard() {
         grid.getChildren().clear();
+
         for (int row = 0; row < 8; row++) {
             for (int col = 0; col < 8; col++) {
                 Rectangle tile = new Rectangle(TILE_SIZE, TILE_SIZE);
-                tile.setFill((row + col) % 2 == 0 ? Color.BEIGE : Color.BROWN);
+                if (row == selectedRow && col == selectedCol) {
+                    tile.setFill(Color.YELLOW);
+                } else {
+                    tile.setFill((row + col) % 2 == 0 ? Color.BEIGE : Color.BROWN);
+                }
 
                 StackPane stack = new StackPane(tile);
+                stack.setId("tile-" + row + "-" + col);
                 ChessPiece piece = GameBoard.board[row][col];
 
                 if (piece != null) {
@@ -55,8 +63,30 @@ public class ChessGame {
                     }
                 }
 
+                int finalRow = row;
+                int finalCol = col;
+                stack.setOnMouseClicked(event -> handleMove(finalRow, finalCol));
+
                 grid.add(stack, col, row);
             }
+        }
+    }
+
+    private void handleMove(int row, int col) {
+        ChessPiece piece = GameBoard.board[row][col];
+
+        if (selectedPiece == null) {
+            if (piece != null && piece.isWhite() == isWhiteTurn) {
+                selectedPiece = piece;
+                selectedRow = row;
+                selectedCol = col;
+                refreshBoard();
+            }
+        } else {
+            selectedPiece = null;
+            selectedRow = -1;
+            selectedCol = -1;
+            refreshBoard();
         }
     }
 }
