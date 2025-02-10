@@ -12,4 +12,8 @@ public class ChessPiece {
     public String getType() {
         return type;
     }
+
+    public boolean isWhite() {
+        return isWhite;
+    }
 }
